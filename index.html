@@ -1,0 +1,573 @@
+<meta charset="UTF-8">
+<title>Imposter</title>
+<style>
+  :root {
+    --bg: #0f1220;
+    --bg2: #1a1f36;
+    --card: #1e2440;
+    --card-border: #2f3768;
+    --accent: #ff4d5e;
+    --accent2: #5b8cff;
+    --text: #eef0ff;
+    --text-dim: #9aa1c9;
+    --good: #37d67a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% 0%, var(--bg2), var(--bg) 60%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px 60px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #app { width: 100%; max-width: 480px; }
+
+  h1.title {
+    text-align: center;
+    font-size: 2.2rem;
+    letter-spacing: 2px;
+    margin: 8px 0 4px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--text-dim);
+    margin-bottom: 28px;
+    font-size: 0.95rem;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 18px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+
+  label.field-label {
+    display: block;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .stepper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg2);
+    border-radius: 12px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+  }
+  .stepper button {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    border: none;
+    background: var(--card-border);
+    color: var(--text);
+    font-size: 1.3rem;
+    cursor: pointer;
+  }
+  .stepper .val {
+    font-size: 1.4rem;
+    font-weight: 600;
+    min-width: 40px;
+    text-align: center;
+  }
+
+  select {
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 1rem;
+    margin-bottom: 16px;
+  }
+
+  .names-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .names-list input {
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 1rem;
+  }
+  .names-list input::placeholder { color: var(--text-dim); }
+
+  button.primary {
+    width: 100%;
+    padding: 16px;
+    border-radius: 14px;
+    border: none;
+    background: linear-gradient(90deg, var(--accent), #ff7a5c);
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(255,77,94,0.35);
+  }
+  button.primary:active { transform: scale(0.98); }
+
+  button.secondary {
+    width: 100%;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--card-border);
+    background: transparent;
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+
+  /* Reveal screen */
+  .reveal-card {
+    text-align: center;
+    padding: 40px 20px;
+  }
+  .pass-to {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .pass-hint {
+    color: var(--text-dim);
+    margin-bottom: 30px;
+  }
+  .hold-button {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    margin: 0 auto;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    border: none;
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 0 0 8px rgba(91,140,255,0.12);
+    transition: transform 0.15s ease;
+  }
+  .hold-button:active { transform: scale(0.95); }
+
+  .role-reveal {
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .role-word {
+    font-size: 2rem;
+    font-weight: 800;
+  }
+  .role-word.imposter { color: var(--accent); }
+  .role-word.crew { color: var(--good); }
+  .role-caption {
+    color: var(--text-dim);
+    font-size: 0.95rem;
+  }
+
+  .progress-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-top: 20px;
+  }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--card-border);
+  }
+  .dot.done { background: var(--good); }
+
+  /* Discussion */
+  .timer {
+    text-align: center;
+    font-size: 3.2rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    margin: 20px 0;
+  }
+  .timer-controls {
+    display: flex;
+    gap: 10px;
+  }
+  .timer-controls button {
+    flex: 1;
+  }
+
+  /* Results */
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .result-row:last-child { border-bottom: none; }
+  .badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .badge.imposter { background: rgba(255,77,94,0.2); color: var(--accent); }
+  .badge.crew { background: rgba(55,214,122,0.2); color: var(--good); }
+
+  .word-reveal {
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  .word-reveal .label { color: var(--text-dim); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
+  .word-reveal .word { font-size: 1.8rem; font-weight: 800; color: var(--accent2); }
+</style>
+<div id="app"></div>
+<script>
+(function () {
+  const CATEGORIES = {
+    "Animals": ["Elephant","Giraffe","Penguin","Octopus","Kangaroo","Dolphin","Cheetah","Gorilla","Peacock","Hedgehog","Flamingo","Chameleon"],
+    "Foods": ["Pizza","Sushi","Taco","Pancake","Lasagna","Burrito","Donut","Ramen","Waffle","Curry","Popcorn","Meatball"],
+    "Movies & Shows": ["Titanic","Jaws","Frozen","Avatar","Shrek","Inception","Friends","The Office","Batman","Jurassic Park"],
+    "Occupations": ["Firefighter","Dentist","Pilot","Chef","Plumber","Teacher","Lawyer","Astronaut","Photographer","Electrician"],
+    "Everyday Objects": ["Umbrella","Toothbrush","Backpack","Flashlight","Blender","Wallet","Mirror","Ladder","Candle","Stapler"],
+    "Places": ["Beach","Library","Airport","Museum","Casino","Hospital","Stadium","Zoo","Cruise Ship","Amusement Park"],
+    "Sports": ["Soccer","Basketball","Tennis","Golf","Boxing","Surfing","Bowling","Hockey","Volleyball","Skiing"],
+  };
+
+  const state = {
+    phase: "setup",
+    playerCount: 4,
+    names: ["", "", "", ""],
+    numImposters: 1,
+    category: "Random (all categories)",
+    revealIndex: 0,
+    revealed: false, // is current card currently showing its role
+    imposterSet: new Set(),
+    word: "",
+    timerSeconds: 300,
+    timerRemaining: 300,
+    timerRunning: false,
+    timerHandle: null,
+  };
+
+  function render() {
+    const app = document.getElementById("app");
+    if (state.phase === "setup") app.innerHTML = renderSetup();
+    else if (state.phase === "reveal") app.innerHTML = renderReveal();
+    else if (state.phase === "discuss") app.innerHTML = renderDiscuss();
+    else if (state.phase === "results") app.innerHTML = renderResults();
+    attachHandlers();
+  }
+
+  function renderSetup() {
+    const maxImposters = Math.max(1, Math.min(3, Math.floor(state.playerCount / 3)));
+    if (state.numImposters > maxImposters) state.numImposters = maxImposters;
+
+    const nameFields = state.names.map((n, i) => `
+      <input type="text" data-name-idx="${i}" placeholder="Player ${i + 1}" value="${escapeHtml(n)}" />
+    `).join("");
+
+    const categoryOptions = ["Random (all categories)", ...Object.keys(CATEGORIES)]
+      .map(c => `<option value="${escapeHtml(c)}" ${c === state.category ? "selected" : ""}>${escapeHtml(c)}</option>`)
+      .join("");
+
+    return `
+      <h1 class="title">IMPOSTER</h1>
+      <div class="subtitle">Pass-and-play secret word game</div>
+
+      <div class="card">
+        <label class="field-label">Number of Players</label>
+        <div class="stepper">
+          <button data-action="dec-players">−</button>
+          <div class="val">${state.playerCount}</div>
+          <button data-action="inc-players">+</button>
+        </div>
+
+        <label class="field-label">Player Names (optional)</label>
+        <div class="names-list">${nameFields}</div>
+      </div>
+
+      <div class="card">
+        <label class="field-label">Number of Imposters</label>
+        <div class="stepper">
+          <button data-action="dec-imposters">−</button>
+          <div class="val">${state.numImposters}</div>
+          <button data-action="inc-imposters">+</button>
+        </div>
+
+        <label class="field-label">Category</label>
+        <select id="category-select">${categoryOptions}</select>
+      </div>
+
+      <button class="primary" data-action="start-game">Start Game</button>
+    `;
+  }
+
+  function renderReveal() {
+    const total = state.playerCount;
+    const idx = state.revealIndex;
+    const name = playerName(idx);
+    const isImposter = state.imposterSet.has(idx);
+
+    const dots = Array.from({ length: total }, (_, i) => `
+      <div class="dot ${i < idx ? "done" : ""}"></div>
+    `).join("");
+
+    const inner = state.revealed
+      ? `
+        <div class="role-reveal">
+          <div class="role-word ${isImposter ? "imposter" : "crew"}">
+            ${isImposter ? "YOU ARE THE IMPOSTER" : escapeHtml(state.word)}
+          </div>
+          <div class="role-caption">
+            ${isImposter ? "Blend in — don't get caught!" : "Keep it secret from the imposter"}
+          </div>
+        </div>
+      `
+      : `
+        <button class="hold-button" id="hold-btn">PRESS &amp;<br/>HOLD<br/>TO REVEAL</button>
+      `;
+
+    return `
+      <div class="card reveal-card">
+        <div class="pass-to">Pass to ${escapeHtml(name)}</div>
+        <div class="pass-hint">Make sure no one else is looking</div>
+        ${inner}
+        <div class="progress-dots">${dots}</div>
+      </div>
+      ${state.revealed ? `<button class="primary" id="next-player-btn">Got it — Next Player</button>` : ""}
+    `;
+  }
+
+  function renderDiscuss() {
+    const mins = Math.floor(state.timerRemaining / 60).toString().padStart(2, "0");
+    const secs = (state.timerRemaining % 60).toString().padStart(2, "0");
+    return `
+      <div class="card">
+        <h1 class="title" style="font-size:1.6rem;">DISCUSSION</h1>
+        <div class="subtitle">Everyone's seen their role. Talk it out and find the imposter${state.numImposters > 1 ? "s" : ""}!</div>
+        <div class="timer">${mins}:${secs}</div>
+        <div class="timer-controls">
+          <button class="secondary" data-action="timer-toggle">${state.timerRunning ? "Pause" : "Start"}</button>
+          <button class="secondary" data-action="timer-reset">Reset</button>
+        </div>
+      </div>
+      <button class="primary" data-action="show-results">Reveal Answers</button>
+    `;
+  }
+
+  function renderResults() {
+    const rows = Array.from({ length: state.playerCount }, (_, i) => {
+      const isImposter = state.imposterSet.has(i);
+      return `
+        <div class="result-row">
+          <span>${escapeHtml(playerName(i))}</span>
+          <span class="badge ${isImposter ? "imposter" : "crew"}">${isImposter ? "IMPOSTER" : "CREW"}</span>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="card">
+        <div class="word-reveal">
+          <div class="label">The secret word was</div>
+          <div class="word">${escapeHtml(state.word)}</div>
+        </div>
+        ${rows}
+      </div>
+      <button class="primary" data-action="play-again">Play Again (Same Players)</button>
+      <button class="secondary" data-action="new-game">New Game / Edit Players</button>
+    `;
+  }
+
+  function playerName(i) {
+    const n = state.names[i];
+    return n && n.trim() ? n.trim() : `Player ${i + 1}`;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  function pickWord() {
+    let pool;
+    if (state.category === "Random (all categories)") {
+      pool = Object.values(CATEGORIES).flat();
+    } else {
+      pool = CATEGORIES[state.category];
+    }
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function pickImposters() {
+    const indices = Array.from({ length: state.playerCount }, (_, i) => i);
+    for (let i = indices.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    return new Set(indices.slice(0, state.numImposters));
+  }
+
+  function stopTimer() {
+    if (state.timerHandle) {
+      clearInterval(state.timerHandle);
+      state.timerHandle = null;
+    }
+    state.timerRunning = false;
+  }
+
+  function attachHandlers() {
+    const app = document.getElementById("app");
+
+    app.querySelectorAll("[data-name-idx]").forEach(input => {
+      input.addEventListener("input", e => {
+        const idx = parseInt(e.target.getAttribute("data-name-idx"), 10);
+        state.names[idx] = e.target.value;
+      });
+    });
+
+    const catSelect = document.getElementById("category-select");
+    if (catSelect) {
+      catSelect.addEventListener("change", e => { state.category = e.target.value; });
+    }
+
+    const clickAction = (selector, fn) => {
+      const el = app.querySelector(selector);
+      if (el) el.addEventListener("click", fn);
+    };
+
+    clickAction('[data-action="inc-players"]', () => {
+      if (state.playerCount < 12) {
+        state.playerCount++;
+        state.names.push("");
+        render();
+      }
+    });
+    clickAction('[data-action="dec-players"]', () => {
+      if (state.playerCount > 3) {
+        state.playerCount--;
+        state.names.pop();
+        render();
+      }
+    });
+    clickAction('[data-action="inc-imposters"]', () => {
+      const maxImposters = Math.max(1, Math.min(3, Math.floor(state.playerCount / 3)));
+      if (state.numImposters < maxImposters) {
+        state.numImposters++;
+        render();
+      }
+    });
+    clickAction('[data-action="dec-imposters"]', () => {
+      if (state.numImposters > 1) {
+        state.numImposters--;
+        render();
+      }
+    });
+
+    clickAction('[data-action="start-game"]', () => {
+      state.word = pickWord();
+      state.imposterSet = pickImposters();
+      state.revealIndex = 0;
+      state.revealed = false;
+      state.phase = "reveal";
+      render();
+    });
+
+    const holdBtn = document.getElementById("hold-btn");
+    if (holdBtn) {
+      const show = () => { state.revealed = true; render(); };
+      holdBtn.addEventListener("mousedown", show);
+      holdBtn.addEventListener("touchstart", e => { e.preventDefault(); show(); }, { passive: false });
+    }
+
+    clickAction("#next-player-btn", () => {
+      state.revealed = false;
+      if (state.revealIndex < state.playerCount - 1) {
+        state.revealIndex++;
+        render();
+      } else {
+        state.timerRemaining = state.timerSeconds;
+        state.timerRunning = false;
+        state.phase = "discuss";
+        render();
+      }
+    });
+
+    clickAction('[data-action="timer-toggle"]', () => {
+      if (state.timerRunning) {
+        stopTimer();
+      } else {
+        state.timerRunning = true;
+        state.timerHandle = setInterval(() => {
+          state.timerRemaining--;
+          if (state.timerRemaining <= 0) {
+            state.timerRemaining = 0;
+            stopTimer();
+          }
+          render();
+        }, 1000);
+      }
+      render();
+    });
+
+    clickAction('[data-action="timer-reset"]', () => {
+      stopTimer();
+      state.timerRemaining = state.timerSeconds;
+      render();
+    });
+
+    clickAction('[data-action="show-results"]', () => {
+      stopTimer();
+      state.phase = "results";
+      render();
+    });
+
+    clickAction('[data-action="play-again"]', () => {
+      state.word = pickWord();
+      state.imposterSet = pickImposters();
+      state.revealIndex = 0;
+      state.revealed = false;
+      state.phase = "reveal";
+      render();
+    });
+
+    clickAction('[data-action="new-game"]', () => {
+      state.phase = "setup";
+      render();
+    });
+  }
+
+  render();
+})();
+</script>

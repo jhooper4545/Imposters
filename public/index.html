@@ -1,0 +1,914 @@
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Imposter — Play Online</title>
+<style>
+  :root {
+    --bg: #0f1220;
+    --bg2: #1a1f36;
+    --card: #1e2440;
+    --card-border: #2f3768;
+    --accent: #ff4d5e;
+    --accent2: #5b8cff;
+    --text: #eef0ff;
+    --text-dim: #9aa1c9;
+    --good: #37d67a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(circle at 50% 0%, var(--bg2), var(--bg) 60%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px 60px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #app { width: 100%; max-width: 480px; }
+
+  h1.title {
+    text-align: center;
+    font-size: 2.2rem;
+    letter-spacing: 2px;
+    margin: 8px 0 4px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .subtitle { text-align: center; color: var(--text-dim); margin-bottom: 28px; font-size: 0.95rem; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 18px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+
+  label.field-label {
+    display: block;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  input[type=text], select {
+    width: 100%;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 1rem;
+    margin-bottom: 16px;
+  }
+  input::placeholder { color: var(--text-dim); }
+
+  .stepper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg2);
+    border-radius: 12px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+  }
+  .stepper button {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    border: none;
+    background: var(--card-border);
+    color: var(--text);
+    font-size: 1.3rem;
+    cursor: pointer;
+  }
+  .stepper .val { font-size: 1.4rem; font-weight: 600; min-width: 40px; text-align: center; }
+
+  button.primary {
+    width: 100%;
+    padding: 16px;
+    border-radius: 14px;
+    border: none;
+    background: linear-gradient(90deg, var(--accent), #ff7a5c);
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(255,77,94,0.35);
+  }
+  button.primary:disabled { opacity: 0.4; box-shadow: none; }
+  button.primary:active:not(:disabled) { transform: scale(0.98); }
+
+  button.secondary {
+    width: 100%;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--card-border);
+    background: transparent;
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+
+  .tab-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .tab-row button {
+    flex: 1;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--card-border);
+    background: var(--card);
+    color: var(--text-dim);
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .tab-row button.active {
+    background: linear-gradient(90deg, var(--accent2), #7aa2ff);
+    color: white;
+    border-color: transparent;
+  }
+
+  .room-code {
+    text-align: center;
+    font-size: 2.6rem;
+    font-weight: 800;
+    letter-spacing: 8px;
+    margin: 6px 0 4px;
+    color: var(--accent2);
+  }
+  .room-code-hint { text-align: center; color: var(--text-dim); font-size: 0.85rem; margin-bottom: 16px; }
+
+  .player-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .player-row:last-child { border-bottom: none; }
+  .player-row .you { color: var(--text-dim); font-size: 0.8rem; margin-left: 6px; }
+  .host-badge {
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: rgba(91,140,255,0.2);
+    color: var(--accent2);
+  }
+
+  .role-card { text-align: center; padding: 30px 20px; }
+  .role-word { font-size: 2rem; font-weight: 800; margin: 10px 0; }
+  .role-word.imposter { color: var(--accent); }
+  .role-word.crew { color: var(--good); }
+  .role-caption { color: var(--text-dim); font-size: 0.95rem; }
+  .imposter-hint {
+    display: inline-block;
+    margin: 4px 0 10px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    background: rgba(255,77,94,0.15);
+    border: 1px solid var(--accent);
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+  .imposter-hint strong { color: var(--accent); }
+  .reveal-toggle {
+    width: 100%;
+    padding: 18px;
+    border-radius: 14px;
+    border: none;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    color: white;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .timer { text-align: center; font-size: 3rem; font-weight: 800; letter-spacing: 2px; margin: 14px 0; }
+  .timer-controls { display: flex; gap: 10px; }
+  .timer-controls button { flex: 1; }
+
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .result-row:last-child { border-bottom: none; }
+  .badge { padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.5px; }
+  .badge.imposter { background: rgba(255,77,94,0.2); color: var(--accent); }
+  .badge.crew { background: rgba(55,214,122,0.2); color: var(--good); }
+
+  .turn-card { text-align: center; }
+  .turn-name { font-size: 1.3rem; font-weight: 700; margin-bottom: 6px; }
+  .turn-word { font-size: 2.1rem; font-weight: 800; color: var(--accent2); margin: 8px 0 4px; word-break: break-word; }
+  .turn-card input[type=text] { text-align: center; font-size: 1.1rem; }
+
+  .word-reveal { text-align: center; margin-bottom: 16px; }
+  .word-reveal .label { color: var(--text-dim); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
+  .word-reveal .word { font-size: 1.8rem; font-weight: 800; color: var(--accent2); }
+
+  .recap-round { margin-top: 10px; }
+  .recap-round:first-of-type { margin-top: 4px; }
+  .recap-round-label { font-size: 0.8rem; color: var(--text-dim); font-weight: 700; margin-bottom: 4px; }
+  .recap-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .recap-row:last-child { border-bottom: none; }
+  .recap-row .who { color: var(--accent2); font-weight: 600; }
+  .recap-row .correct { color: var(--good); font-weight: 700; }
+  .recap-row .wrong { color: var(--accent); font-weight: 700; }
+
+  .suspect-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+  .suspect-btn {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 110px;
+    padding: 14px 10px;
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .suspect-btn:active { transform: scale(0.95); }
+
+  .voting-card-big {
+    animation: voting-pulse 1s ease-in-out infinite;
+    border-width: 2px;
+  }
+  @keyframes voting-pulse {
+    0%, 100% { box-shadow: 0 0 0px 0px rgba(255,77,94,0.0); border-color: var(--card-border); }
+    50% { box-shadow: 0 0 28px 6px rgba(255,77,94,0.55); border-color: var(--accent); }
+  }
+  .big-countdown {
+    font-size: 5.5rem;
+    font-weight: 900;
+    line-height: 1;
+    margin: 10px 0;
+    text-align: center;
+    background: linear-gradient(90deg, #ff4d5e, #ffb347, #37d67a, #5b8cff, #c94dff, #ff4d5e);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: countdown-rainbow 1.5s linear infinite, countdown-pop 0.5s ease;
+  }
+  @keyframes countdown-rainbow {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 300% 50%; }
+  }
+  @keyframes countdown-pop {
+    0% { transform: scale(0.6); opacity: 0.3; }
+    60% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  .error-banner {
+    background: rgba(255,77,94,0.15);
+    border: 1px solid var(--accent);
+    color: #ffb3ba;
+    padding: 12px 14px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+  }
+
+  .local-link { text-align: center; margin-top: 6px; }
+  .local-link a { color: var(--text-dim); font-size: 0.85rem; }
+
+  .chat-card { padding: 16px; }
+  .chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .chat-header .field-label { margin-bottom: 0; }
+  .chat-messages {
+    max-height: 160px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding-right: 4px;
+  }
+  .chat-empty { color: var(--text-dim); font-size: 0.85rem; text-align: center; padding: 10px 0; }
+  .chat-msg {
+    background: var(--bg2);
+    border-radius: 10px;
+    padding: 7px 10px;
+    font-size: 0.9rem;
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+  }
+  .chat-msg .who { font-weight: 700; color: var(--accent2); flex-shrink: 0; }
+  .chat-msg .what { color: var(--text); }
+  .chat-expressions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chat-expressions button {
+    flex: 1 1 calc(25% - 8px);
+    min-width: 70px;
+    padding: 10px 6px;
+    border-radius: 10px;
+    border: 1px solid var(--card-border);
+    background: var(--bg2);
+    color: var(--text);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .chat-expressions button:active { transform: scale(0.95); }
+</style>
+<div id="app"></div>
+<script>
+(function () {
+  const state = {
+    view: "home",       // home | lobby | playing | results
+    tab: "create",       // create | join
+    name: localStorage.getItem("imposter_name") || "",
+    joinCode: "",
+    customCode: "",
+    roomCode: localStorage.getItem("imposter_room") || null,
+    playerId: localStorage.getItem("imposter_pid") || null,
+    room: null,
+    error: null,
+    busy: false,
+    revealed: false,
+    pollHandle: null,
+    wordDraft: "",
+  };
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  async function api(path, method, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
+  }
+
+  function saveSession() {
+    if (state.roomCode) localStorage.setItem("imposter_room", state.roomCode);
+    if (state.playerId) localStorage.setItem("imposter_pid", state.playerId);
+    if (state.name) localStorage.setItem("imposter_name", state.name);
+  }
+
+  function clearSession() {
+    localStorage.removeItem("imposter_room");
+    localStorage.removeItem("imposter_pid");
+    state.roomCode = null;
+    state.playerId = null;
+    state.room = null;
+  }
+
+  function startPolling() {
+    stopPolling();
+    state.pollHandle = setInterval(pollRoom, 1500);
+  }
+  function stopPolling() {
+    if (state.pollHandle) { clearInterval(state.pollHandle); state.pollHandle = null; }
+  }
+
+  async function pollRoom() {
+    if (!state.roomCode || !state.playerId) return;
+    try {
+      const room = await api(`/api/rooms/${state.roomCode}?playerId=${state.playerId}`, "GET");
+      const wasPlaying = state.room && state.room.phase === "playing";
+      state.room = room;
+      state.error = null;
+      if (room.phase === "lobby") state.view = "lobby";
+      else if (room.phase === "playing") { state.view = "playing"; if (!wasPlaying) state.revealed = false; }
+      else if (room.phase === "results") state.view = "results";
+
+      // If the player is actively typing their word for their own turn, don't blow
+      // away the input/focus on this poll cycle — just keep the state fresh silently.
+      const active = document.activeElement;
+      const isTypingOwnWord = active && active.id === "word-input"
+        && room.turnSubPhase === "clues" && room.turn && room.turn.state === "submitting" && room.turn.isYourTurn;
+      if (isTypingOwnWord) return;
+
+      render();
+    } catch (e) {
+      // Room may have expired — drop back to home
+      state.error = e.message;
+      stopPolling();
+      clearSession();
+      state.view = "home";
+      render();
+    }
+  }
+
+  function render() {
+    const app = document.getElementById("app");
+    if (state.view === "home") app.innerHTML = renderHome();
+    else if (state.view === "lobby") app.innerHTML = renderLobby() + renderChat();
+    else if (state.view === "playing") app.innerHTML = renderPlaying() + renderChat();
+    else if (state.view === "results") app.innerHTML = renderResults() + renderChat();
+    attachHandlers();
+    const msgEl = document.getElementById("chat-messages");
+    if (msgEl) msgEl.scrollTop = msgEl.scrollHeight;
+  }
+
+  function formatTime(sec) {
+    sec = Math.max(0, Math.round(sec));
+    const m = Math.floor(sec / 60).toString().padStart(2, "0");
+    const s = (sec % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  }
+
+  function renderError() {
+    return state.error ? `<div class="error-banner">${escapeHtml(state.error)}</div>` : "";
+  }
+
+  function renderChat() {
+    const room = state.room;
+    if (!room) return "";
+    const messages = (room.chat || []).length
+      ? room.chat.map(m => `
+          <div class="chat-msg">
+            <span class="who">${escapeHtml(m.name)}:</span>
+            <span class="what">${escapeHtml(m.expression)}</span>
+          </div>
+        `).join("")
+      : `<div class="chat-empty">No messages yet — send a reaction!</div>`;
+
+    const buttons = (room.expressions || []).map(ex => `
+      <button data-expression="${escapeHtml(ex)}">${escapeHtml(ex)}</button>
+    `).join("");
+
+    return `
+      <div class="card chat-card">
+        <div class="chat-header"><label class="field-label">Room Chat</label></div>
+        <div class="chat-messages" id="chat-messages">${messages}</div>
+        <div class="chat-expressions">${buttons}</div>
+      </div>
+    `;
+  }
+
+  function renderHome() {
+    return `
+      <h1 class="title">IMPOSTER</h1>
+      <div class="subtitle">Play online with friends — each on your own phone</div>
+      ${renderError()}
+      <div class="tab-row">
+        <button data-tab="create" class="${state.tab === "create" ? "active" : ""}">Create Game</button>
+        <button data-tab="join" class="${state.tab === "join" ? "active" : ""}">Join Game</button>
+      </div>
+      <div class="card">
+        <label class="field-label">Your Name</label>
+        <input type="text" id="name-input" placeholder="e.g. Jordan" value="${escapeHtml(state.name)}" maxlength="24" />
+        ${state.tab === "join" ? `
+          <label class="field-label">Room Code</label>
+          <input type="text" id="code-input" placeholder="ABCD" maxlength="8" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:1.3rem;" value="${escapeHtml(state.joinCode)}" />
+        ` : `
+          <label class="field-label">Room Code (optional)</label>
+          <input type="text" id="custom-code-input" placeholder="Leave blank for a random code" maxlength="8" style="text-transform:uppercase;letter-spacing:4px;text-align:center;font-size:1.3rem;" value="${escapeHtml(state.customCode)}" />
+        `}
+        <button class="primary" id="submit-btn" ${state.busy ? "disabled" : ""}>
+          ${state.tab === "create" ? "Create Room" : "Join Room"}
+        </button>
+      </div>
+      <div class="local-link"><a href="/local.html">Just want same-device pass-and-play? Click here</a></div>
+    `;
+  }
+
+  function renderLobby() {
+    const room = state.room;
+    const players = room.players.map(p => `
+      <div class="player-row">
+        <span>${escapeHtml(p.name)}${p.isYou ? '<span class="you">(you)</span>' : ""}</span>
+        ${p.isHost ? '<span class="host-badge">HOST</span>' : ""}
+      </div>
+    `).join("");
+
+    const catOptions = room.categories.map(c =>
+      `<option value="${escapeHtml(c)}" ${c === room.category ? "selected" : ""}>${escapeHtml(c)}</option>`
+    ).join("");
+
+    const hostControls = room.isHost ? `
+      <div class="card">
+        <label class="field-label">Number of Imposters</label>
+        <div class="stepper">
+          <button data-action="dec-imposters">−</button>
+          <div class="val">${room.numImposters}</div>
+          <button data-action="inc-imposters">+</button>
+        </div>
+        <label class="field-label">Category</label>
+        <select id="category-select">${catOptions}</select>
+      </div>
+      <button class="primary" data-action="start-game" ${room.players.length < 3 ? "disabled" : ""}>
+        ${room.players.length < 3 ? "Need at least 3 players" : "Start Game"}
+      </button>
+    ` : `
+      <div class="card">
+        <div class="subtitle" style="margin-bottom:0;">Waiting for the host to start the game…</div>
+      </div>
+    `;
+
+    return `
+      <h1 class="title">IMPOSTER</h1>
+      ${renderError()}
+      <div class="card">
+        <div class="room-code">${escapeHtml(room.code)}</div>
+        <div class="room-code-hint">Share this code with your friends</div>
+        ${players}
+      </div>
+      ${hostControls}
+    `;
+  }
+
+  function renderPlaying() {
+    const room = state.room;
+    const isImposter = room.yourRole === "imposter";
+
+    const roleInner = state.revealed
+      ? `
+        <div class="role-word ${isImposter ? "imposter" : "crew"}">
+          ${isImposter ? "YOU ARE THE IMPOSTER" : escapeHtml(room.yourRole)}
+        </div>
+        ${isImposter && room.categoryHint ? `<div class="imposter-hint">Category hint: <strong>${escapeHtml(room.categoryHint)}</strong></div>` : ""}
+        <div class="role-caption">${isImposter ? "Blend in — don't get caught!" : "Keep it secret from the imposter"}</div>
+        <button class="secondary" id="hide-role-btn">Hide</button>
+      `
+      : `<button class="reveal-toggle" id="reveal-role-btn">Tap to Reveal Your Role</button>`;
+
+    let midSection;
+    if (room.turnSubPhase === "clues" && room.turn) {
+      midSection = renderTurnCard(room) + renderRoundWordsList(room);
+    } else if (room.turnSubPhase === "voting" && room.voting) {
+      midSection = renderVotingCard(room);
+    } else {
+      midSection = `
+        <div class="card">
+          <div class="subtitle" style="margin-bottom:6px;">Discuss and find the imposter${room.numImposters > 1 ? "s" : ""}!</div>
+          <div class="timer" id="game-timer">${formatTime(room.timer.remaining)}</div>
+        </div>
+      `;
+    }
+
+    return `
+      <h1 class="title" style="font-size:1.6rem;">YOUR ROLE</h1>
+      ${renderError()}
+      <div class="card role-card">${roleInner}</div>
+      ${midSection}
+    `;
+  }
+
+  function renderTurnCard(room) {
+    const t = room.turn;
+    const roundLabel = `Round ${t.round} of ${t.totalRounds}`;
+
+    if (t.state === "revealed" && t.currentWord) {
+      const cw = t.currentWord;
+      return `
+        <div class="card turn-card">
+          <div class="subtitle" style="margin-bottom:6px;">${roundLabel}</div>
+          <div class="turn-name">${escapeHtml(cw.name)}</div>
+          <div class="turn-word">${cw.skipped ? "(no answer — time's up)" : escapeHtml(cw.word)}</div>
+        </div>
+      `;
+    }
+
+    const isYourTurn = t.isYourTurn;
+    const body = isYourTurn
+      ? `
+        <input type="text" id="word-input" placeholder="Type your word" maxlength="40" value="${escapeHtml(state.wordDraft || "")}" autofocus />
+        <button class="primary" id="submit-word-btn">Submit Word</button>
+      `
+      : `<div class="subtitle" style="margin-bottom:0;">Waiting for their word…</div>`;
+
+    return `
+      <div class="card turn-card">
+        <div class="subtitle" style="margin-bottom:6px;">${roundLabel}</div>
+        <div class="turn-name">${isYourTurn ? "Your turn!" : escapeHtml(t.currentPlayerName) + "'s turn"}</div>
+        <div class="timer" id="turn-timer">${formatTime(t.remaining)}</div>
+        ${body}
+      </div>
+    `;
+  }
+
+  function renderVotingCard(room) {
+    const v = room.voting;
+    const remaining = room.timer.remaining;
+    const bigMode = remaining <= 10 && room.timer.status === "running";
+    const suspects = (v.suspects || []).filter(p => !p.isYou);
+
+    const timerHtml = bigMode
+      ? `<div class="big-countdown" id="game-timer">${Math.max(0, Math.round(remaining))}</div>`
+      : `<div class="timer" id="game-timer">${formatTime(remaining)}</div>`;
+
+    let body;
+    if (v.yourGuess) {
+      const guessedPlayer = (v.suspects || []).find(p => p.id === v.yourGuess);
+      body = `
+        <div class="subtitle" style="margin-bottom:0;">
+          You guessed <strong>${escapeHtml(guessedPlayer ? guessedPlayer.name : "someone")}</strong> — locked in!
+          (${v.lockedCount}/${v.totalPlayers} locked in)
+        </div>
+      `;
+    } else {
+      body = `
+        <div class="subtitle" style="margin-bottom:10px;">Who's the imposter? Tap to lock your guess.</div>
+        <div class="suspect-grid">
+          ${suspects.map(p => `<button class="secondary suspect-btn" data-guess="${escapeHtml(p.id)}">${escapeHtml(p.name)}</button>`).join("")}
+        </div>
+        <div class="subtitle" style="margin-top:10px;margin-bottom:0;">${v.lockedCount}/${v.totalPlayers} locked in</div>
+      `;
+    }
+
+    return `
+      <div class="card ${bigMode ? "voting-card-big" : ""}" style="text-align:center;">
+        <div class="subtitle" style="margin-bottom:6px;">Lock In Your Guess</div>
+        ${timerHtml}
+        ${body}
+      </div>
+    `;
+  }
+
+  function renderRoundWordsList(room) {
+    const t = room.turn;
+    const roundWords = (t.words || []).filter(w => w.round === t.round);
+    if (!roundWords.length) return "";
+    const rows = roundWords.map(w => `
+      <div class="recap-row">
+        <span class="who">${escapeHtml(w.name)}</span>
+        <span class="what">${w.word ? escapeHtml(w.word) : "(no answer)"}</span>
+      </div>
+    `).join("");
+    return `
+      <div class="card">
+        <label class="field-label">This Round's Words</label>
+        ${rows}
+      </div>
+    `;
+  }
+
+  function renderResults() {
+    const room = state.room;
+    const rows = room.results.map(p => `
+      <div class="result-row">
+        <span>${escapeHtml(p.name)}</span>
+        <span class="badge ${p.isImposter ? "imposter" : "crew"}">${p.isImposter ? "IMPOSTER" : "CREW"}</span>
+      </div>
+    `).join("");
+
+    const hostControls = room.isHost ? `
+      <button class="primary" data-action="play-again">Play Again (Same Players)</button>
+      <button class="secondary" data-action="new-lobby">Back to Lobby</button>
+    ` : `<div class="subtitle">Waiting for the host to start another round…</div>`;
+
+    const history = room.turnHistory || [];
+    let recap = "";
+    if (history.length) {
+      const byRound = {};
+      history.forEach(h => { (byRound[h.round] = byRound[h.round] || []).push(h); });
+      const roundBlocks = Object.keys(byRound).sort((a, b) => a - b).map(r => `
+        <div class="recap-round">
+          <div class="recap-round-label">Round ${escapeHtml(r)}</div>
+          ${byRound[r].map(h => `
+            <div class="recap-row">
+              <span class="who">${escapeHtml(h.name)}</span>
+              <span class="what">${h.word ? escapeHtml(h.word) : "(no answer)"}</span>
+            </div>
+          `).join("")}
+        </div>
+      `).join("");
+      recap = `<div class="card"><label class="field-label">Words Given</label>${roundBlocks}</div>`;
+    }
+
+    const votes = room.votes || [];
+    let votesRecap = "";
+    if (votes.length) {
+      const voteRows = votes.map(v => `
+        <div class="recap-row">
+          <span class="who">${escapeHtml(v.name)}</span>
+          <span class="what">
+            guessed ${v.guessName ? escapeHtml(v.guessName) : "no one"}
+            <span class="${v.correct ? "correct" : "wrong"}">${v.correct ? "✓" : "✗"}</span>
+          </span>
+        </div>
+      `).join("");
+      votesRecap = `<div class="card"><label class="field-label">Who Guessed What</label>${voteRows}</div>`;
+    }
+
+    return `
+      ${renderError()}
+      <div class="card">
+        <div class="word-reveal">
+          <div class="label">The secret word was</div>
+          <div class="word">${escapeHtml(room.word)}</div>
+        </div>
+        ${rows}
+      </div>
+      ${votesRecap}
+      ${recap}
+      ${hostControls}
+    `;
+  }
+
+  function attachHandlers() {
+    const app = document.getElementById("app");
+    const click = (sel, fn) => { const el = app.querySelector(sel); if (el) el.addEventListener("click", fn); };
+
+    app.querySelectorAll("[data-tab]").forEach(btn => {
+      btn.addEventListener("click", () => { state.tab = btn.getAttribute("data-tab"); render(); });
+    });
+
+    const nameInput = document.getElementById("name-input");
+    if (nameInput) nameInput.addEventListener("input", e => { state.name = e.target.value; });
+    const codeInput = document.getElementById("code-input");
+    if (codeInput) codeInput.addEventListener("input", e => { state.joinCode = e.target.value.toUpperCase(); });
+    const customCodeInput = document.getElementById("custom-code-input");
+    if (customCodeInput) customCodeInput.addEventListener("input", e => { state.customCode = e.target.value.toUpperCase(); });
+
+    click("#submit-btn", async () => {
+      state.error = null;
+      const name = (state.name || "").trim();
+      if (!name) { state.error = "Enter your name first."; render(); return; }
+      state.busy = true; render();
+      try {
+        let room;
+        if (state.tab === "create") {
+          const code = (state.customCode || "").trim().toUpperCase();
+          room = await api("/api/rooms", "POST", code ? { name, code } : { name });
+        } else {
+          const code = (state.joinCode || "").trim().toUpperCase();
+          if (code.length < 3) throw new Error("Enter the room code.");
+          room = await api(`/api/rooms/${code}/join`, "POST", { name });
+        }
+        state.playerId = room.playerId;
+        state.roomCode = room.code;
+        saveSession();
+        state.room = room;
+        state.view = room.phase === "lobby" ? "lobby" : room.phase;
+        state.busy = false;
+        render();
+        startPolling();
+      } catch (e) {
+        state.busy = false;
+        state.error = e.message;
+        render();
+      }
+    });
+
+    click('[data-action="inc-imposters"]', async () => {
+      const n = Math.min(3, state.room.numImposters + 1);
+      await safeApi(`/api/rooms/${state.roomCode}/settings`, { playerId: state.playerId, numImposters: n });
+    });
+    click('[data-action="dec-imposters"]', async () => {
+      const n = Math.max(1, state.room.numImposters - 1);
+      await safeApi(`/api/rooms/${state.roomCode}/settings`, { playerId: state.playerId, numImposters: n });
+    });
+    const catSelect = document.getElementById("category-select");
+    if (catSelect) catSelect.addEventListener("change", async e => {
+      await safeApi(`/api/rooms/${state.roomCode}/settings`, { playerId: state.playerId, category: e.target.value });
+    });
+
+    click('[data-action="start-game"]', async () => {
+      await safeApi(`/api/rooms/${state.roomCode}/start`, { playerId: state.playerId });
+    });
+
+    click("#reveal-role-btn", () => { state.revealed = true; render(); });
+    click("#hide-role-btn", () => { state.revealed = false; render(); });
+
+    click('[data-action="timer-toggle"]', async () => {
+      const action = state.room.timer.status === "running" ? "pause" : "start";
+      await safeApi(`/api/rooms/${state.roomCode}/timer`, { playerId: state.playerId, action });
+    });
+    click('[data-action="timer-reset"]', async () => {
+      await safeApi(`/api/rooms/${state.roomCode}/timer`, { playerId: state.playerId, action: "reset" });
+    });
+
+    click('[data-action="show-results"]', async () => {
+      await safeApi(`/api/rooms/${state.roomCode}/reveal`, { playerId: state.playerId });
+    });
+
+    const wordInput = document.getElementById("word-input");
+    if (wordInput) {
+      wordInput.addEventListener("input", e => { state.wordDraft = e.target.value; });
+      wordInput.addEventListener("keydown", e => {
+        if (e.key === "Enter") { e.preventDefault(); document.getElementById("submit-word-btn").click(); }
+      });
+    }
+    click("#submit-word-btn", async () => {
+      const word = (state.wordDraft || "").trim();
+      if (!word) { state.error = "Type a word first."; render(); return; }
+      state.wordDraft = "";
+      await safeApi(`/api/rooms/${state.roomCode}/turn/submit`, { playerId: state.playerId, word });
+    });
+    click('[data-action="play-again"]', async () => {
+      await safeApi(`/api/rooms/${state.roomCode}/again`, { playerId: state.playerId });
+    });
+    click('[data-action="new-lobby"]', async () => {
+      await safeApi(`/api/rooms/${state.roomCode}/lobby`, { playerId: state.playerId });
+    });
+
+    app.querySelectorAll("[data-expression]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const expression = btn.getAttribute("data-expression");
+        await safeApi(`/api/rooms/${state.roomCode}/chat`, { playerId: state.playerId, expression });
+      });
+    });
+
+    app.querySelectorAll("[data-guess]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const guessId = btn.getAttribute("data-guess");
+        await safeApi(`/api/rooms/${state.roomCode}/vote`, { playerId: state.playerId, guessId });
+      });
+    });
+  }
+
+  async function safeApi(path, body) {
+    try {
+      const room = await api(path, "POST", body);
+      state.room = room;
+      state.error = null;
+      if (room.phase === "lobby") state.view = "lobby";
+      else if (room.phase === "playing") state.view = "playing";
+      else if (room.phase === "results") state.view = "results";
+      render();
+    } catch (e) {
+      state.error = e.message;
+      render();
+    }
+  }
+
+  // Local timer ticking between polls, for smoothness.
+  // Updates timer text directly (no full render()) so it never disrupts
+  // someone actively typing their word into #word-input.
+  setInterval(() => {
+    const room = state.room;
+    if (!room || state.view !== "playing") return;
+    if (room.timer && room.timer.status === "running" && room.timer.remaining > 0) {
+      const before = room.timer.remaining;
+      room.timer.remaining = Math.max(0, room.timer.remaining - 1);
+      const after = room.timer.remaining;
+      // During the vote-lock countdown, the display flips into a big colorful
+      // mode at exactly 10s left, and needs to keep re-rendering every second
+      // while in that mode so the rainbow/pop animation replays each tick.
+      if (room.turnSubPhase === "voting") {
+        if (after <= 10 || before <= 10) { render(); return; }
+      }
+      const el = document.getElementById("game-timer");
+      if (el) el.textContent = formatTime(room.timer.remaining);
+    }
+    if (room.turnSubPhase === "clues" && room.turn && room.turn.state === "submitting" && room.turn.remaining > 0) {
+      room.turn.remaining = Math.max(0, room.turn.remaining - 1);
+      const el = document.getElementById("turn-timer");
+      if (el) el.textContent = formatTime(room.turn.remaining);
+    }
+  }, 1000);
+
+  // Rejoin an existing session on load, if we have one saved
+  async function init() {
+    if (state.roomCode && state.playerId) {
+      try {
+        const room = await api(`/api/rooms/${state.roomCode}?playerId=${state.playerId}`, "GET");
+        state.room = room;
+        state.view = room.phase === "lobby" ? "lobby" : room.phase;
+        render();
+        startPolling();
+        return;
+      } catch (e) {
+        clearSession();
+      }
+    }
+    render();
+  }
+
+  init();
+})();
+</script>
