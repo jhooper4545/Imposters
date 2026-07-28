@@ -1070,6 +1070,10 @@
     `;
   }
 
+  function bjSwitchLinkHtml() {
+    return `<div class="local-link"><a href="#" id="switch-to-imposter-link">🕵️ Play Imposter instead</a></div>`;
+  }
+
   function bjRenderLobby() {
     const room = state.bjRoom;
     const players = room.players.map(p => `
@@ -1099,6 +1103,7 @@
         <div class="subtitle" style="margin-bottom:0;">3 rounds • one shared letter + 12 categories • 90 seconds • duplicate answers cancel out • chain valid answers for 🦃 Turkey / 🐙 Octopus / 👁️ Sixth Sense • 🏝️ Sole Survivor for a category nobody else answered • 📏 Big Word for 10+ letters • zero duplicates all round earns 🧠 Mastermind • sweep every category for 🎯 +5 • 🎰 go All In on one category to double it (or lose 2 if it busts) • 👻 haunted categories pay double next time • a total whiff refunds the next category • watch for a surprise bonus round!</div>
       </div>
       ${hostControls}
+      ${bjSwitchLinkHtml()}
     `;
   }
 
@@ -1171,6 +1176,7 @@
         <div class="subtitle" style="margin:10px 0 0;">🎰 Tap the dice on one category to go All In — doubles if it scores, costs 2 if it busts.</div>
       </div>
       <div class="card" style="text-align:center;">${lockControl}</div>
+      ${bjSwitchLinkHtml()}
     `;
   }
 
@@ -1232,6 +1238,7 @@
       ${categorySweepBanner}
       <div class="card">${categoryBlocks}</div>
       ${hostControls}
+      ${bjSwitchLinkHtml()}
     `;
   }
 
@@ -1255,6 +1262,7 @@
       ${bjRenderError()}
       <div class="card">${rows}</div>
       ${hostControls}
+      ${bjSwitchLinkHtml()}
     `;
   }
 
