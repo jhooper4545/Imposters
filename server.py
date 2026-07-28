@@ -463,6 +463,7 @@ def bj_start_round(room, bonus=False):
 # blank, invalid, or canceled-duplicate answer, so a player can earn the same
 # milestone more than once per round by breaking and rebuilding the streak.
 BJ_STREAK_MILESTONES = {3: ("Turkey", 1), 4: ("Octopus", 3), 6: ("Sixth Sense", 3)}
+BJ_SOLE_SURVIVOR_BONUS = 2  # you're the only player who wrote anything for this category
 
 
 def bj_compute_round(room):
@@ -477,8 +478,11 @@ def bj_compute_round(room):
 
     for cat in categories:
         norm_counts = {}
+        answered_count = 0
         for p in room["players"]:
             raw = (answers.get(p["id"], {}).get(cat) or "").strip()
+            if raw:
+                answered_count += 1
             norm = bj_normalize(raw)
             if norm:
                 norm_counts[norm] = norm_counts.get(norm, 0) + 1
@@ -496,7 +500,7 @@ def bj_compute_round(room):
             if canceled:
                 canceled_counts[pid] += 1
 
-            streak_label = None
+            badges = []
             if scored:
                 if word_count >= 2:
                     mw_streak[pid] += 1
@@ -508,8 +512,13 @@ def bj_compute_round(room):
                 streak[pid] += 1
                 milestone = BJ_STREAK_MILESTONES.get(streak[pid])
                 if milestone:
-                    streak_label, streak_bonus = milestone
-                    points += streak_bonus
+                    label, bonus = milestone
+                    badges.append({"label": label, "points": bonus})
+                    points += bonus
+
+                if answered_count == 1:
+                    badges.append({"label": "Sole Survivor", "points": BJ_SOLE_SURVIVOR_BONUS})
+                    points += BJ_SOLE_SURVIVOR_BONUS
             else:
                 streak[pid] = 0
                 mw_streak[pid] = 0
@@ -519,7 +528,7 @@ def bj_compute_round(room):
             entries.append({
                 "playerId": pid, "name": p["name"], "answer": raw,
                 "valid": valid, "canceled": canceled, "points": points,
-                "streakLabel": streak_label,
+                "badges": badges,
             })
         breakdown.append({"category": cat, "entries": entries})
 

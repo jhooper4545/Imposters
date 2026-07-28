@@ -1078,7 +1078,7 @@
         ${players}
       </div>
       <div class="card">
-        <div class="subtitle" style="margin-bottom:0;">3 rounds • one shared letter + 12 categories per round • 90 seconds to answer • duplicate answers cancel out • chain valid answers for 🦃 Turkey / 🐙 Octopus / 👁️ Sixth Sense bonuses • zero duplicates all round earns 🧠 Mastermind • watch for a surprise bonus round!</div>
+        <div class="subtitle" style="margin-bottom:0;">3 rounds • one shared letter + 12 categories per round • 90 seconds to answer • duplicate answers cancel out • chain valid answers for 🦃 Turkey / 🐙 Octopus / 👁️ Sixth Sense bonuses • 🏝️ Sole Survivor if you're the only one who answered a category • zero duplicates all round earns 🧠 Mastermind • watch for a surprise bonus round!</div>
       </div>
       ${hostControls}
     `;
@@ -1148,7 +1148,7 @@
     `;
   }
 
-  const BJ_STREAK_EMOJI = { "Turkey": "🦃", "Octopus": "🐙", "Sixth Sense": "👁️" };
+  const BJ_STREAK_EMOJI = { "Turkey": "🦃", "Octopus": "🐙", "Sixth Sense": "👁️", "Sole Survivor": "🏝️" };
 
   function bjRenderReveal() {
     const room = state.bjRoom;
@@ -1160,9 +1160,9 @@
       const entryRows = block.entries.map(e => {
         const cls = e.canceled ? "wrong" : (e.valid ? "correct" : "wrong");
         const status = e.canceled ? "Canceled (dup)" : (e.valid ? `+${e.points}` : (e.answer ? "Invalid" : "No answer"));
-        const streakChip = e.streakLabel
-          ? ` <span class="bj-streak-chip">${BJ_STREAK_EMOJI[e.streakLabel] || "⭐"} ${escapeHtml(e.streakLabel)}!</span>`
-          : "";
+        const streakChip = (e.badges || []).map(b =>
+          ` <span class="bj-streak-chip">${BJ_STREAK_EMOJI[b.label] || "⭐"} ${escapeHtml(b.label)}!</span>`
+        ).join("");
         return `
           <div class="recap-row">
             <span class="who">${escapeHtml(e.name)}</span>
