@@ -352,7 +352,25 @@
     font-weight: 600;
     line-height: 1.2;
   }
-  .bj-category-row input[type=text] { margin-bottom: 0; }
+  .bj-category-row input[type=text] { margin-bottom: 0; flex: 1; }
+  .bj-ghost-tag { color: var(--accent2); font-weight: 700; }
+  .bj-allin-btn {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid var(--card-border);
+    background: var(--bg2);
+    font-size: 1.1rem;
+    cursor: pointer;
+    opacity: 0.55;
+  }
+  .bj-allin-btn.selected {
+    opacity: 1;
+    border-color: #ffb347;
+    background: rgba(255,179,71,0.18);
+    box-shadow: 0 0 10px rgba(255,179,71,0.4);
+  }
 
   .bj-reveal-block { margin-bottom: 16px; }
   .bj-reveal-block:last-child { margin-bottom: 0; }
@@ -1078,7 +1096,7 @@
         ${players}
       </div>
       <div class="card">
-        <div class="subtitle" style="margin-bottom:0;">3 rounds • one shared letter + 12 categories per round • 90 seconds to answer • duplicate answers cancel out • chain valid answers for 🦃 Turkey / 🐙 Octopus / 👁️ Sixth Sense bonuses • 🏝️ Sole Survivor if you're the only one who answered a category • zero duplicates all round earns 🧠 Mastermind • watch for a surprise bonus round!</div>
+        <div class="subtitle" style="margin-bottom:0;">3 rounds • one shared letter + 12 categories • 90 seconds • duplicate answers cancel out • chain valid answers for 🦃 Turkey / 🐙 Octopus / 👁️ Sixth Sense • 🏝️ Sole Survivor for a category nobody else answered • 📏 Big Word for 10+ letters • zero duplicates all round earns 🧠 Mastermind • sweep every category for 🎯 +5 • 🎰 go All In on one category to double it (or lose 2 if it busts) • 👻 haunted categories pay double next time • a total whiff refunds the next category • watch for a surprise bonus round!</div>
       </div>
       ${hostControls}
     `;
@@ -1117,14 +1135,19 @@
       ? `BONUS ROUND — ${escapeHtml(room.bonusCategoryLabel)}`
       : `Round ${room.roundNumber} of ${room.totalRounds}`;
 
+    const ghostCategories = room.ghostCategories || [];
     const rows = room.categories.map((cat, i) => {
       const label = isBonus ? `${i + 1}.` : escapeHtml(cat);
       const value = escapeHtml(state.bjAnswers[cat] || "");
+      const isGhost = ghostCategories.includes(cat);
+      const isAllIn = room.yourAllIn === cat;
       return `
         <div class="bj-category-row">
-          <label class="bj-category-label">${label}</label>
+          <label class="bj-category-label">${label}${isGhost ? ' <span class="bj-ghost-tag">👻 2x</span>' : ""}</label>
           <input type="text" class="bj-answer-input" data-category="${escapeHtml(cat)}" value="${value}" maxlength="60"
             ${room.youLocked ? "disabled" : ""} placeholder="Starts with ${escapeHtml(room.letter)}…" />
+          <button type="button" class="bj-allin-btn ${isAllIn ? "selected" : ""}" data-allin-category="${escapeHtml(cat)}"
+            ${room.youLocked ? "disabled" : ""} title="Go All In on this category">🎰</button>
         </div>
       `;
     }).join("");
@@ -1143,12 +1166,18 @@
         <div class="bj-letter">${escapeHtml(room.letter)}</div>
         ${timerHtml}
       </div>
-      <div class="card">${rows}</div>
+      <div class="card">
+        ${rows}
+        <div class="subtitle" style="margin:10px 0 0;">🎰 Tap the dice on one category to go All In — doubles if it scores, costs 2 if it busts.</div>
+      </div>
       <div class="card" style="text-align:center;">${lockControl}</div>
     `;
   }
 
-  const BJ_STREAK_EMOJI = { "Turkey": "🦃", "Octopus": "🐙", "Sixth Sense": "👁️", "Sole Survivor": "🏝️" };
+  const BJ_STREAK_EMOJI = {
+    "Turkey": "🦃", "Octopus": "🐙", "Sixth Sense": "👁️", "Sole Survivor": "🏝️",
+    "Big Word": "📏", "All In": "🎰", "All In (busted)": "💥", "Ghost Town": "👻", "Miss Refund": "🔁",
+  };
 
   function bjRenderReveal() {
     const room = state.bjRoom;
@@ -1160,9 +1189,10 @@
       const entryRows = block.entries.map(e => {
         const cls = e.canceled ? "wrong" : (e.valid ? "correct" : "wrong");
         const status = e.canceled ? "Canceled (dup)" : (e.valid ? `+${e.points}` : (e.answer ? "Invalid" : "No answer"));
-        const streakChip = (e.badges || []).map(b =>
-          ` <span class="bj-streak-chip">${BJ_STREAK_EMOJI[b.label] || "⭐"} ${escapeHtml(b.label)}!</span>`
-        ).join("");
+        const streakChip = (e.badges || []).map(b => {
+          const sign = b.points >= 0 ? "+" : "";
+          return ` <span class="bj-streak-chip">${BJ_STREAK_EMOJI[b.label] || "⭐"} ${escapeHtml(b.label)} ${sign}${b.points}</span>`;
+        }).join("");
         return `
           <div class="recap-row">
             <span class="who">${escapeHtml(e.name)}</span>
@@ -1183,6 +1213,9 @@
     const mastermindBanner = (rr.mastermindNames && rr.mastermindNames.length)
       ? `<div class="card bj-mastermind-banner" style="text-align:center;">🧠 <strong>Mastermind</strong> — no duplicates all round: ${rr.mastermindNames.map(escapeHtml).join(", ")} <span class="bj-mastermind-pts">+1</span></div>`
       : "";
+    const categorySweepBanner = (rr.categorySweepNames && rr.categorySweepNames.length)
+      ? `<div class="card bj-mastermind-banner" style="text-align:center;">🎯 <strong>Category Sweep</strong> — scored on every category: ${rr.categorySweepNames.map(escapeHtml).join(", ")} <span class="bj-mastermind-pts">+5</span></div>`
+      : "";
 
     const hostControls = room.isHost
       ? `<button class="primary" data-action="bj-next-round">Continue</button>`
@@ -1196,6 +1229,7 @@
         ${scoreRows}
       </div>
       ${mastermindBanner}
+      ${categorySweepBanner}
       <div class="card">${categoryBlocks}</div>
       ${hostControls}
     `;
@@ -1418,6 +1452,14 @@
             await api(`/api/bj/rooms/${state.bjRoomCode}/answer`, "POST", { playerId: state.bjPlayerId, category: cat, text: e.target.value });
           } catch (err) { /* best effort — next poll resyncs anyway */ }
         }, 400);
+      });
+    });
+    app.querySelectorAll(".bj-allin-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const cat = btn.getAttribute("data-allin-category");
+        const alreadySelected = state.bjRoom && state.bjRoom.yourAllIn === cat;
+        const category = alreadySelected ? "" : cat;
+        await bjSafeApi(`/api/bj/rooms/${state.bjRoomCode}/allin`, { playerId: state.bjPlayerId, category });
       });
     });
     click("#bj-lockin-btn", async () => {

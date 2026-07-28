@@ -431,6 +431,7 @@ def bj_public_players(room):
 
 
 def bj_start_round(room, bonus=False):
+    room["allIn"] = {}
     if bonus:
         room["roundType"] = "bonus"
         base_cat = random.choice(BJ_BONUS_CATEGORIES)
@@ -441,6 +442,7 @@ def bj_start_round(room, bonus=False):
         room["categories"] = [f"{base_cat} #{i + 1}" for i in range(BJ_BONUS_SLOTS)]
         room["categorySlots"] = BJ_BONUS_SLOTS
         room["bonusUsed"] = True
+        room["ghostRoundCategories"] = []  # Ghost Town only applies to the normal category bank
         seconds = BJ_BONUS_ROUND_SECONDS
     else:
         room["roundType"] = "normal"
@@ -448,6 +450,13 @@ def bj_start_round(room, bonus=False):
         room["categories"] = random.sample(BJ_CATEGORY_BANK, 12)
         room["categorySlots"] = None
         room["bonusCategoryLabel"] = None
+        # Categories nobody scored on last time they came up are "haunted" —
+        # consume them from the pending set so a repeat appearance pays double.
+        ghost_set = room.get("ghostCategories", set())
+        room["ghostRoundCategories"] = [c for c in room["categories"] if c in ghost_set]
+        for c in room["ghostRoundCategories"]:
+            ghost_set.discard(c)
+        room["ghostCategories"] = ghost_set
         seconds = BJ_ROUND_SECONDS
     room["letter"] = random.choice(BJ_LETTERS)
     room["answers"] = {p["id"]: {} for p in room["players"]}
@@ -463,18 +472,29 @@ def bj_start_round(room, bonus=False):
 # blank, invalid, or canceled-duplicate answer, so a player can earn the same
 # milestone more than once per round by breaking and rebuilding the streak.
 BJ_STREAK_MILESTONES = {3: ("Turkey", 1), 4: ("Octopus", 3), 6: ("Sixth Sense", 3)}
-BJ_SOLE_SURVIVOR_BONUS = 2  # you're the only player who wrote anything for this category
+BJ_SOLE_SURVIVOR_BONUS = 2   # you're the only player who wrote anything for this category
+BJ_BIG_WORD_LEN = 10         # letters, not counting spaces
+BJ_BIG_WORD_BONUS = 2
+BJ_ALLIN_PENALTY = 2         # lost from your round total if your All-In pick busts
+BJ_CATEGORY_SWEEP_BONUS = 5  # scored on every category this round
+BJ_UNANIMOUS_MISS_BONUS = 1  # everyone scores an extra point on the category right after a total whiff
 
 
 def bj_compute_round(room):
     categories = room["categories"]
     letter = room["letter"]
     answers = room.get("answers", {})
+    all_in = room.get("allIn", {})
+    ghost_this_round = set(room.get("ghostRoundCategories", []))
+
     breakdown = []
     round_points = {p["id"]: 0 for p in room["players"]}
     streak = {p["id"]: 0 for p in room["players"]}
     mw_streak = {p["id"]: 0 for p in room["players"]}
     canceled_counts = {p["id"]: 0 for p in room["players"]}
+    scored_counts = {p["id"]: 0 for p in room["players"]}
+    next_category_bonus = False
+    newly_ghosted = []
 
     for cat in categories:
         norm_counts = {}
@@ -486,12 +506,18 @@ def bj_compute_round(room):
             norm = bj_normalize(raw)
             if norm:
                 norm_counts[norm] = norm_counts.get(norm, 0) + 1
+
+        this_category_bonus = next_category_bonus
+        next_category_bonus = False
+        any_scored_this_category = False
         entries = []
+
         for p in room["players"]:
             pid = p["id"]
             raw = (answers.get(pid, {}).get(cat) or "").strip()
             norm = bj_normalize(raw)
             word_count = len(raw.split()) if raw else 0
+            letters_only_len = len(raw.replace(" ", ""))
             base_points = bj_score_answer(raw, letter) if raw else 0
             valid = base_points > 0
             canceled = valid and norm_counts.get(norm, 0) > 1
@@ -501,7 +527,11 @@ def bj_compute_round(room):
                 canceled_counts[pid] += 1
 
             badges = []
+            points = 0
             if scored:
+                any_scored_this_category = True
+                scored_counts[pid] += 1
+
                 if word_count >= 2:
                     mw_streak[pid] += 1
                     points = 2 * mw_streak[pid]  # escalating "double word" bonus: 2, 4, 6, ...
@@ -519,10 +549,29 @@ def bj_compute_round(room):
                 if answered_count == 1:
                     badges.append({"label": "Sole Survivor", "points": BJ_SOLE_SURVIVOR_BONUS})
                     points += BJ_SOLE_SURVIVOR_BONUS
+
+                if letters_only_len >= BJ_BIG_WORD_LEN:
+                    badges.append({"label": "Big Word", "points": BJ_BIG_WORD_BONUS})
+                    points += BJ_BIG_WORD_BONUS
+
+                if this_category_bonus:
+                    badges.append({"label": "Miss Refund", "points": BJ_UNANIMOUS_MISS_BONUS})
+                    points += BJ_UNANIMOUS_MISS_BONUS
+
+                if cat in ghost_this_round:
+                    badges.append({"label": "Ghost Town", "points": points})
+                    points *= 2
             else:
                 streak[pid] = 0
                 mw_streak[pid] = 0
-                points = 0
+
+            if all_in.get(pid) == cat:
+                if scored:
+                    badges.append({"label": "All In", "points": points})
+                    points *= 2
+                else:
+                    badges.append({"label": "All In (busted)", "points": -BJ_ALLIN_PENALTY})
+                    points -= BJ_ALLIN_PENALTY
 
             round_points[pid] += points
             entries.append({
@@ -530,25 +579,44 @@ def bj_compute_round(room):
                 "valid": valid, "canceled": canceled, "points": points,
                 "badges": badges,
             })
+
+        # A total whiff (nobody validly scored) haunts this category for its next
+        # appearance; a total blank (nobody even attempted it) gives everyone a
+        # small refund on the very next category, so one dead category doesn't
+        # just eat the round.
+        if not any_scored_this_category and cat not in ghost_this_round:
+            newly_ghosted.append(cat)
+        if answered_count == 0:
+            next_category_bonus = True
+
         breakdown.append({"category": cat, "entries": entries})
 
     mastermind_names = []
+    category_sweep_names = []
     for p in room["players"]:
-        if canceled_counts[p["id"]] == 0:
-            round_points[p["id"]] += 1
+        pid = p["id"]
+        if canceled_counts[pid] == 0:
+            round_points[pid] += 1
             mastermind_names.append(p["name"])
+        if len(categories) > 0 and scored_counts[pid] == len(categories):
+            round_points[pid] += BJ_CATEGORY_SWEEP_BONUS
+            category_sweep_names.append(p["name"])
 
-    return breakdown, round_points, mastermind_names
+    return breakdown, round_points, mastermind_names, category_sweep_names, newly_ghosted
 
 
 def bj_end_round(room):
-    breakdown, round_points, mastermind_names = bj_compute_round(room)
+    breakdown, round_points, mastermind_names, category_sweep_names, newly_ghosted = bj_compute_round(room)
+    ghost_set = room.get("ghostCategories", set())
+    ghost_set.update(newly_ghosted)
+    room["ghostCategories"] = ghost_set
     for p in room["players"]:
         p["score"] = p.get("score", 0) + round_points.get(p["id"], 0)
     room["roundResults"] = {
         "breakdown": breakdown,
         "roundPoints": round_points,
         "mastermindNames": mastermind_names,
+        "categorySweepNames": category_sweep_names,
     }
     room["phase"] = "reveal"
     room["timer"] = {"status": "stopped", "remaining": 0, "endsAt": None}
@@ -609,6 +677,8 @@ def bj_room_view(room, player_id):
         view["lockedCount"] = len(room.get("locked", set()))
         view["totalPlayers"] = len(room["players"])
         view["youLocked"] = player_id in room.get("locked", set())
+        view["ghostCategories"] = room.get("ghostRoundCategories", [])
+        view["yourAllIn"] = room.get("allIn", {}).get(player_id)
     if phase == "reveal":
         view["letter"] = room["letter"]
         view["categories"] = room["categories"]
@@ -1040,6 +1110,9 @@ class Handler(BaseHTTPRequestHandler):
                         "locked": set(),
                         "roundResults": None,
                         "bonusUsed": False,
+                        "allIn": {},
+                        "ghostCategories": set(),
+                        "ghostRoundCategories": [],
                         "timer": {"status": "stopped", "remaining": 0, "endsAt": None},
                         "createdAt": now(),
                         "lastActivity": now(),
@@ -1077,6 +1150,7 @@ class Handler(BaseHTTPRequestHandler):
                         raise ApiError(409, f"Need at least {BJ_MIN_PLAYERS} players")
                     room["bonusUsed"] = False
                     room["roundNumber"] = 0
+                    room["ghostCategories"] = set()
                     for p in room["players"]:
                         p["score"] = 0
                     bj_start_round(room, bonus=False)
@@ -1101,6 +1175,30 @@ class Handler(BaseHTTPRequestHandler):
                     if player_id in room.get("locked", set()):
                         raise ApiError(409, "You already locked in your answers")
                     room["answers"].setdefault(player_id, {})[category] = text
+                    room["lastActivity"] = now()
+                    view = bj_room_view(room, player_id)
+                return self.send_json(200, view)
+
+            # POST /api/bj/rooms/<code>/allin  {playerId, category} -> designate (or "" to clear) your
+            # All-In pick for this round: doubles that category's points if it scores, costs 2 if it busts
+            if len(parts) == 5 and parts[0:3] == ["api", "bj", "rooms"] and parts[4] == "allin":
+                code = parts[3]
+                player_id = body.get("playerId", "")
+                category = body.get("category", "")
+                with LOCK:
+                    room = bj_require_room(code)
+                    bj_require_player(room, player_id)
+                    bj_sync(room)
+                    if room["phase"] != "playing":
+                        raise ApiError(409, "Not in an active round right now")
+                    if player_id in room.get("locked", set()):
+                        raise ApiError(409, "You already locked in your answers")
+                    if category and category not in room["categories"]:
+                        raise ApiError(400, "Not a valid category this round")
+                    if category:
+                        room.setdefault("allIn", {})[player_id] = category
+                    else:
+                        room.setdefault("allIn", {}).pop(player_id, None)
                     room["lastActivity"] = now()
                     view = bj_room_view(room, player_id)
                 return self.send_json(200, view)
@@ -1144,6 +1242,7 @@ class Handler(BaseHTTPRequestHandler):
                     bj_require_host(room, player_id)
                     room["bonusUsed"] = False
                     room["roundNumber"] = 0
+                    room["ghostCategories"] = set()
                     for p in room["players"]:
                         p["score"] = 0
                     bj_start_round(room, bonus=False)
