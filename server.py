@@ -11,6 +11,7 @@ Run: python3 server.py [port]
 import json
 import os
 import random
+import re
 import secrets
 import string
 import sys
@@ -359,6 +360,276 @@ def apply_leaderboard_wins(room):
                 record_imposter_win(name)
 
 
+#
+# ---------- Brain Jam (Scattergories-style) ----------
+#
+
+BJ_LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "L", "M", "N", "O", "P", "R", "S", "T", "W"]
+
+BJ_CATEGORY_BANK = [
+    "Type Of Bird", "Type Of Insect", "Color", "Things Found In This Room",
+    "Things You Say While Playing A Sport", "Sports", "Things You Say Before Falling Asleep",
+    "Things You Do At Night", "Things You Do During The Day", "Type Of Fish", "Fruit", "Vegetable",
+    "Article Of Clothing", "Kitchen Item", "School Subject", "Job Or Occupation", "Music Genre",
+    "Board Game", "Video Game", "Superhero Or Villain", "Cartoon Character", "Dance Move", "Holiday",
+    "Type Of Weather", "Drink", "Musical Instrument", "Car Brand", "Body Part", "Something Sticky",
+    "Something Cold", "Thing You'd Find At A Party", "Thing You'd Bring To The Beach", "Emotion",
+    "Type Of Tree", "Dog Breed",
+]
+
+BJ_BONUS_CATEGORIES = [
+    "Movie", "Country", "Famous Athlete", "Common Phrase Or Saying", "TV Show",
+    "Celebrity", "Song Title", "Brand Name", "Video Game", "City",
+]
+
+BJ_TOTAL_ROUNDS = 3
+BJ_ROUND_SECONDS = 90
+BJ_BONUS_ROUND_SECONDS = 75
+BJ_BONUS_SLOTS = 10
+BJ_BONUS_CHANCE = 0.4  # checked once between each normal round; capped at one bonus round per game
+BJ_MIN_PLAYERS = 2
+
+BJ_ROOMS = {}  # code -> room dict
+
+
+def bj_gen_room_code():
+    while True:
+        code = "".join(secrets.choice(ROOM_CODE_CHARS) for _ in range(4))
+        if code not in BJ_ROOMS:
+            return code
+
+
+def bj_gc_rooms():
+    cutoff = now() - STALE_SECONDS
+    dead = [c for c, r in BJ_ROOMS.items() if r["lastActivity"] < cutoff]
+    for c in dead:
+        del BJ_ROOMS[c]
+
+
+def bj_normalize(s):
+    cleaned = re.sub(r"[^a-z0-9 ]", "", (s or "").strip().lower())
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def bj_score_answer(answer, letter):
+    """Base score = 1 point per word in the answer that starts with the round's
+    letter, as long as the FIRST word starts with it (otherwise the whole answer
+    is invalid). This is what makes a true alliterative answer like "Frosted
+    Flakes" worth 2 instead of 1 — but a run broken by a non-matching word still
+    only counts the words that actually match, nothing extra for "almost"."""
+    words = [w for w in (answer or "").strip().split() if w]
+    if not words or words[0][0].lower() != letter.lower():
+        return 0
+    return sum(1 for w in words if w[0].lower() == letter.lower())
+
+
+def bj_public_players(room):
+    return [
+        {"id": p["id"], "name": p["name"], "isHost": p["id"] == room["hostId"], "score": p.get("score", 0)}
+        for p in room["players"]
+    ]
+
+
+def bj_start_round(room, bonus=False):
+    if bonus:
+        room["roundType"] = "bonus"
+        base_cat = random.choice(BJ_BONUS_CATEGORIES)
+        room["bonusCategoryLabel"] = base_cat
+        # 10 numbered blanks for the one category, modeled as 10 synthetic
+        # per-slot "categories" so the existing duplicate-cancellation +
+        # alliteration scoring machinery just works without any changes.
+        room["categories"] = [f"{base_cat} #{i + 1}" for i in range(BJ_BONUS_SLOTS)]
+        room["categorySlots"] = BJ_BONUS_SLOTS
+        room["bonusUsed"] = True
+        seconds = BJ_BONUS_ROUND_SECONDS
+    else:
+        room["roundType"] = "normal"
+        room["roundNumber"] = room.get("roundNumber", 0) + 1
+        room["categories"] = random.sample(BJ_CATEGORY_BANK, 12)
+        room["categorySlots"] = None
+        room["bonusCategoryLabel"] = None
+        seconds = BJ_ROUND_SECONDS
+    room["letter"] = random.choice(BJ_LETTERS)
+    room["answers"] = {p["id"]: {} for p in room["players"]}
+    room["locked"] = set()
+    room["roundResults"] = None
+    room["phase"] = "playing"
+    room["timer"] = {"status": "running", "remaining": seconds, "endsAt": now() + seconds}
+
+
+# Named milestones for a player's consecutive-scoring-answer streak within a
+# round. Hitting one of these exact lengths (not just "at least") pays out a
+# bonus on top of that category's normal points; the streak resets to 0 on any
+# blank, invalid, or canceled-duplicate answer, so a player can earn the same
+# milestone more than once per round by breaking and rebuilding the streak.
+BJ_STREAK_MILESTONES = {3: ("Turkey", 1), 4: ("Octopus", 3), 6: ("Sixth Sense", 3)}
+
+
+def bj_compute_round(room):
+    categories = room["categories"]
+    letter = room["letter"]
+    answers = room.get("answers", {})
+    breakdown = []
+    round_points = {p["id"]: 0 for p in room["players"]}
+    streak = {p["id"]: 0 for p in room["players"]}
+    mw_streak = {p["id"]: 0 for p in room["players"]}
+    canceled_counts = {p["id"]: 0 for p in room["players"]}
+
+    for cat in categories:
+        norm_counts = {}
+        for p in room["players"]:
+            raw = (answers.get(p["id"], {}).get(cat) or "").strip()
+            norm = bj_normalize(raw)
+            if norm:
+                norm_counts[norm] = norm_counts.get(norm, 0) + 1
+        entries = []
+        for p in room["players"]:
+            pid = p["id"]
+            raw = (answers.get(pid, {}).get(cat) or "").strip()
+            norm = bj_normalize(raw)
+            word_count = len(raw.split()) if raw else 0
+            base_points = bj_score_answer(raw, letter) if raw else 0
+            valid = base_points > 0
+            canceled = valid and norm_counts.get(norm, 0) > 1
+            scored = valid and not canceled
+
+            if canceled:
+                canceled_counts[pid] += 1
+
+            streak_label = None
+            if scored:
+                if word_count >= 2:
+                    mw_streak[pid] += 1
+                    points = 2 * mw_streak[pid]  # escalating "double word" bonus: 2, 4, 6, ...
+                else:
+                    mw_streak[pid] = 0
+                    points = base_points
+
+                streak[pid] += 1
+                milestone = BJ_STREAK_MILESTONES.get(streak[pid])
+                if milestone:
+                    streak_label, streak_bonus = milestone
+                    points += streak_bonus
+            else:
+                streak[pid] = 0
+                mw_streak[pid] = 0
+                points = 0
+
+            round_points[pid] += points
+            entries.append({
+                "playerId": pid, "name": p["name"], "answer": raw,
+                "valid": valid, "canceled": canceled, "points": points,
+                "streakLabel": streak_label,
+            })
+        breakdown.append({"category": cat, "entries": entries})
+
+    mastermind_names = []
+    for p in room["players"]:
+        if canceled_counts[p["id"]] == 0:
+            round_points[p["id"]] += 1
+            mastermind_names.append(p["name"])
+
+    return breakdown, round_points, mastermind_names
+
+
+def bj_end_round(room):
+    breakdown, round_points, mastermind_names = bj_compute_round(room)
+    for p in room["players"]:
+        p["score"] = p.get("score", 0) + round_points.get(p["id"], 0)
+    room["roundResults"] = {
+        "breakdown": breakdown,
+        "roundPoints": round_points,
+        "mastermindNames": mastermind_names,
+    }
+    room["phase"] = "reveal"
+    room["timer"] = {"status": "stopped", "remaining": 0, "endsAt": None}
+
+
+def bj_sync(room):
+    """Lazily end the round once the timer runs out or everyone's locked in —
+    same lazy wall-clock-comparison pattern as the Imposter game's sync_turn."""
+    if room["phase"] != "playing":
+        return
+    ts = room["timer"]
+    all_locked = len(room["players"]) > 0 and len(room.get("locked", set())) >= len(room["players"])
+    if (ts["status"] == "running" and now() >= ts["endsAt"]) or all_locked:
+        bj_end_round(room)
+
+
+def bj_advance(room):
+    """Move from a finished (reveal) round to the next one. Always plays exactly
+    BJ_TOTAL_ROUNDS normal rounds; at most once, between two of them, a surprise
+    bonus round can be inserted instead — never right after the very last round."""
+    if room["roundType"] == "bonus":
+        if room.get("roundNumber", 0) >= BJ_TOTAL_ROUNDS:
+            room["phase"] = "gameover"
+        else:
+            bj_start_round(room, bonus=False)
+        return
+    if room.get("roundNumber", 0) >= BJ_TOTAL_ROUNDS:
+        room["phase"] = "gameover"
+        return
+    if not room.get("bonusUsed") and random.random() < BJ_BONUS_CHANCE:
+        bj_start_round(room, bonus=True)
+    else:
+        bj_start_round(room, bonus=False)
+
+
+def bj_room_view(room, player_id):
+    bj_sync(room)
+    phase = room["phase"]
+    view = {
+        "code": room["code"],
+        "phase": phase,
+        "isHost": player_id == room["hostId"],
+        "youId": player_id,
+        "players": bj_public_players(room),
+        "totalRounds": BJ_TOTAL_ROUNDS,
+        "roundNumber": room.get("roundNumber", 0),
+        "roundType": room.get("roundType"),
+    }
+    if phase == "playing":
+        ts = room["timer"]
+        remaining = max(0, ts["endsAt"] - now()) if ts["status"] == "running" else ts["remaining"]
+        view["timer"] = {"status": ts["status"], "remaining": round(remaining)}
+        view["letter"] = room["letter"]
+        view["categories"] = room["categories"]
+        view["categorySlots"] = room.get("categorySlots")
+        view["bonusCategoryLabel"] = room.get("bonusCategoryLabel")
+        view["yourAnswers"] = room.get("answers", {}).get(player_id, {})
+        view["lockedCount"] = len(room.get("locked", set()))
+        view["totalPlayers"] = len(room["players"])
+        view["youLocked"] = player_id in room.get("locked", set())
+    if phase == "reveal":
+        view["letter"] = room["letter"]
+        view["categories"] = room["categories"]
+        view["categorySlots"] = room.get("categorySlots")
+        view["bonusCategoryLabel"] = room.get("bonusCategoryLabel")
+        view["roundResults"] = room.get("roundResults")
+    if phase == "gameover":
+        view["finalScores"] = sorted(bj_public_players(room), key=lambda p: -p["score"])
+    return view
+
+
+def bj_require_room(code):
+    room = BJ_ROOMS.get(code.upper())
+    if not room:
+        raise ApiError(404, "Room not found")
+    return room
+
+
+def bj_require_player(room, player_id):
+    p = next((p for p in room["players"] if p["id"] == player_id), None)
+    if not p:
+        raise ApiError(403, "Not a player in this room")
+    return p
+
+
+def bj_require_host(room, player_id):
+    if room["hostId"] != player_id:
+        raise ApiError(403, "Only the host can do that")
+
+
 class ApiError(Exception):
     def __init__(self, status, message):
         self.status = status
@@ -475,6 +746,15 @@ class Handler(BaseHTTPRequestHandler):
                     require_player(room, player_id)
                     room["lastActivity"] = now()
                     view = room_view(room, player_id)
+                return self.send_json(200, view)
+            if len(parts) == 4 and parts[0:3] == ["api", "bj", "rooms"]:
+                code = parts[3]
+                player_id = (qs.get("playerId") or [""])[0]
+                with LOCK:
+                    room = bj_require_room(code)
+                    bj_require_player(room, player_id)
+                    room["lastActivity"] = now()
+                    view = bj_room_view(room, player_id)
                 return self.send_json(200, view)
             return self.send_json(404, {"error": "Not found"})
         except ApiError as e:
@@ -727,6 +1007,151 @@ class Handler(BaseHTTPRequestHandler):
                         room["chat"] = room["chat"][-CHAT_HISTORY_LIMIT:]
                     room["lastActivity"] = now()
                     view = room_view(room, player_id)
+                return self.send_json(200, view)
+
+            # POST /api/bj/rooms  {name} -> create Brain Jam room, becomes host
+            if parts == ["api", "bj", "rooms"]:
+                name = (body.get("name") or "").strip()[:24] or "Host"
+                with LOCK:
+                    bj_gc_rooms()
+                    code = bj_gen_room_code()
+                    player_id = gen_player_id()
+                    room = {
+                        "code": code,
+                        "hostId": player_id,
+                        "players": [{"id": player_id, "name": name, "score": 0}],
+                        "phase": "lobby",
+                        "roundNumber": 0,
+                        "roundType": None,
+                        "letter": None,
+                        "categories": [],
+                        "categorySlots": None,
+                        "bonusCategoryLabel": None,
+                        "answers": {},
+                        "locked": set(),
+                        "roundResults": None,
+                        "bonusUsed": False,
+                        "timer": {"status": "stopped", "remaining": 0, "endsAt": None},
+                        "createdAt": now(),
+                        "lastActivity": now(),
+                    }
+                    BJ_ROOMS[code] = room
+                    view = bj_room_view(room, player_id)
+                view["playerId"] = player_id
+                return self.send_json(200, view)
+
+            # POST /api/bj/rooms/<code>/join  {name}
+            if len(parts) == 5 and parts[0:3] == ["api", "bj", "rooms"] and parts[4] == "join":
+                code = parts[3]
+                name = (body.get("name") or "").strip()[:24] or "Player"
+                with LOCK:
+                    room = bj_require_room(code)
+                    if room["phase"] != "lobby":
+                        raise ApiError(409, "Game already started — ask the host for a new game")
+                    if len(room["players"]) >= 12:
+                        raise ApiError(409, "Room is full")
+                    player_id = gen_player_id()
+                    room["players"].append({"id": player_id, "name": name, "score": 0})
+                    room["lastActivity"] = now()
+                    view = bj_room_view(room, player_id)
+                view["playerId"] = player_id
+                return self.send_json(200, view)
+
+            # POST /api/bj/rooms/<code>/start  {playerId}  (host only)
+            if len(parts) == 5 and parts[0:3] == ["api", "bj", "rooms"] and parts[4] == "start":
+                code = parts[3]
+                player_id = body.get("playerId", "")
+                with LOCK:
+                    room = bj_require_room(code)
+                    bj_require_host(room, player_id)
+                    if len(room["players"]) < BJ_MIN_PLAYERS:
+                        raise ApiError(409, f"Need at least {BJ_MIN_PLAYERS} players")
+                    room["bonusUsed"] = False
+                    room["roundNumber"] = 0
+                    for p in room["players"]:
+                        p["score"] = 0
+                    bj_start_round(room, bonus=False)
+                    room["lastActivity"] = now()
+                    view = bj_room_view(room, player_id)
+                return self.send_json(200, view)
+
+            # POST /api/bj/rooms/<code>/answer  {playerId, category, text}
+            if len(parts) == 5 and parts[0:3] == ["api", "bj", "rooms"] and parts[4] == "answer":
+                code = parts[3]
+                player_id = body.get("playerId", "")
+                category = body.get("category", "")
+                text = (body.get("text") or "")[:60]
+                with LOCK:
+                    room = bj_require_room(code)
+                    bj_require_player(room, player_id)
+                    bj_sync(room)
+                    if room["phase"] != "playing":
+                        raise ApiError(409, "Not in an active round right now")
+                    if category not in room["categories"]:
+                        raise ApiError(400, "Not a valid category this round")
+                    if player_id in room.get("locked", set()):
+                        raise ApiError(409, "You already locked in your answers")
+                    room["answers"].setdefault(player_id, {})[category] = text
+                    room["lastActivity"] = now()
+                    view = bj_room_view(room, player_id)
+                return self.send_json(200, view)
+
+            # POST /api/bj/rooms/<code>/lockin  {playerId} -> lock in early; ends the round once everyone has
+            if len(parts) == 5 and parts[0:3] == ["api", "bj", "rooms"] and parts[4] == "lockin":
+                code = parts[3]
+                player_id = body.get("playerId", "")
+                with LOCK:
+                    room = bj_require_room(code)
+                    bj_require_player(room, player_id)
+                    bj_sync(room)
+                    if room["phase"] != "playing":
+                        raise ApiError(409, "Not in an active round right now")
+                    room.setdefault("locked", set()).add(player_id)
+                    bj_sync(room)
+                    room["lastActivity"] = now()
+                    view = bj_room_view(room, player_id)
+                return self.send_json(200, view)
+
+            # POST /api/bj/rooms/<code>/next  {playerId}  (host only) -> advance from reveal to the next round
+            if len(parts) == 5 and parts[0:3] == ["api", "bj", "rooms"] and parts[4] == "next":
+                code = parts[3]
+                player_id = body.get("playerId", "")
+                with LOCK:
+                    room = bj_require_room(code)
+                    bj_require_host(room, player_id)
+                    if room["phase"] != "reveal":
+                        raise ApiError(409, "Not ready for the next round yet")
+                    bj_advance(room)
+                    room["lastActivity"] = now()
+                    view = bj_room_view(room, player_id)
+                return self.send_json(200, view)
+
+            # POST /api/bj/rooms/<code>/again  {playerId}  (host only) -> new game, same players, scores reset
+            if len(parts) == 5 and parts[0:3] == ["api", "bj", "rooms"] and parts[4] == "again":
+                code = parts[3]
+                player_id = body.get("playerId", "")
+                with LOCK:
+                    room = bj_require_room(code)
+                    bj_require_host(room, player_id)
+                    room["bonusUsed"] = False
+                    room["roundNumber"] = 0
+                    for p in room["players"]:
+                        p["score"] = 0
+                    bj_start_round(room, bonus=False)
+                    room["lastActivity"] = now()
+                    view = bj_room_view(room, player_id)
+                return self.send_json(200, view)
+
+            # POST /api/bj/rooms/<code>/lobby  {playerId}  (host only) -> back to lobby
+            if len(parts) == 5 and parts[0:3] == ["api", "bj", "rooms"] and parts[4] == "lobby":
+                code = parts[3]
+                player_id = body.get("playerId", "")
+                with LOCK:
+                    room = bj_require_room(code)
+                    bj_require_host(room, player_id)
+                    room["phase"] = "lobby"
+                    room["lastActivity"] = now()
+                    view = bj_room_view(room, player_id)
                 return self.send_json(200, view)
 
             return self.send_json(404, {"error": "Not found"})
