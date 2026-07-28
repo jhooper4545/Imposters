@@ -22,25 +22,85 @@ from urllib.parse import urlparse, parse_qs
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
 CATEGORIES = {
-    "Animals": ["Elephant", "Giraffe", "Penguin", "Octopus", "Kangaroo", "Dolphin", "Cheetah", "Gorilla", "Peacock", "Hedgehog", "Flamingo", "Chameleon"],
-    "Foods": ["Pizza", "Sushi", "Taco", "Pancake", "Lasagna", "Burrito", "Donut", "Ramen", "Waffle", "Curry", "Popcorn", "Meatball"],
-    "Movies & Shows": ["Titanic", "Jaws", "Frozen", "Avatar", "Shrek", "Inception", "Friends", "The Office", "Batman", "Jurassic Park"],
-    "Occupations": ["Firefighter", "Dentist", "Pilot", "Chef", "Plumber", "Teacher", "Lawyer", "Astronaut", "Photographer", "Electrician"],
-    "Everyday Objects": ["Umbrella", "Toothbrush", "Backpack", "Flashlight", "Blender", "Wallet", "Mirror", "Ladder", "Candle", "Stapler"],
-    "Places": ["Beach", "Library", "Airport", "Museum", "Casino", "Hospital", "Stadium", "Zoo", "Cruise Ship", "Amusement Park"],
-    "Sports": ["Soccer", "Basketball", "Tennis", "Golf", "Boxing", "Surfing", "Bowling", "Hockey", "Volleyball", "Skiing"],
+    "Animals": ["Platypus", "Mongoose", "Ocelot", "Narwhal", "Pangolin", "Meerkat", "Iguana", "Armadillo", "Toucan", "Bison", "Otter", "Falcon"],
+    "Foods": ["Bruschetta", "Falafel", "Gazpacho", "Croissant", "Empanada", "Tempura", "Baklava", "Ceviche", "Paella", "Bibimbap", "Poutine", "Risotto"],
+    "Movies & Shows": ["Inception", "Whiplash", "Parasite", "The Wire", "Chernobyl", "Fargo", "Interstellar", "Severance", "Succession", "Arrival"],
+    "Occupations": ["Cartographer", "Actuary", "Locksmith", "Choreographer", "Sommelier", "Blacksmith", "Taxidermist", "Orthodontist", "Upholsterer", "Podiatrist"],
+    "Everyday Objects": ["Corkscrew", "Thermostat", "Colander", "Trowel", "Carabiner", "Whisk", "Grommet", "Tweezers", "Clothespin", "Spatula"],
+    "Places": ["Monastery", "Vineyard", "Boardwalk", "Speakeasy", "Observatory", "Lighthouse", "Greenhouse", "Courtroom", "Auditorium", "Marina"],
+    "Sports": ["Fencing", "Curling", "Archery", "Badminton", "Rowing", "Snowboarding", "Water Polo", "Lacrosse", "Rugby", "Pentathlon"],
 }
 ALL_CATEGORY = "Random (all categories)"
+
+# Vaguer, harder-to-exploit hints shown to the imposter instead of the literal
+# category name (e.g. "Foods" is a dead giveaway once you know the category list;
+# "Something You Eat" still narrows it down without handing over the answer).
+CATEGORY_HINTS = {
+    "Animals": "A Living Creature",
+    "Foods": "Something You Eat",
+    "Movies & Shows": "A Piece Of Entertainment",
+    "Occupations": "A Job Someone Does",
+    "Everyday Objects": "A Physical Object",
+    "Places": "A Location You Could Visit",
+    "Sports": "A Physical Activity",
+}
+
+
+def category_hint(category):
+    return CATEGORY_HINTS.get(category, "Something Common")
 
 ROOM_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no ambiguous 0/O/1/I
 
 # Tap-only reactions for the live room chat — no free typing allowed.
-EXPRESSIONS = ["👍 Nice", "😂 Lol", "🤨 Sus", "🤔 Hmm", "🔥 Fire", "❓ Doesn't make sense", "😮 Whoa", "👏 Clap"]
+EXPRESSIONS = [
+    "😏 NOICE", "😂 Lol", "🤨 Sus", "🤔 Hmm", "🔥 FIA", "❓ Doesn't make sense",
+    "😮 Whoa", "👏 Clap", "🦈 Biting", "😬 Bite", "🎣 Real Me In", "💪 Tuff",
+    "⏰ Hurry Up", "⏳ Time", "🕵️ IMPOSTER",
+]
 CHAT_HISTORY_LIMIT = 100
 
 LOCK = threading.Lock()
 ROOMS = {}  # code -> room dict
 STALE_SECONDS = 6 * 60 * 60  # gc rooms untouched for 6h
+
+LEADERBOARD_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "leaderboard.json")
+LEADERBOARD = {}  # name.lower() -> {"name": display name, "wins": int}
+
+
+def load_leaderboard():
+    global LEADERBOARD
+    try:
+        with open(LEADERBOARD_FILE, "r") as f:
+            LEADERBOARD = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        LEADERBOARD = {}
+
+
+def save_leaderboard():
+    try:
+        tmp = LEADERBOARD_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(LEADERBOARD, f)
+        os.replace(tmp, LEADERBOARD_FILE)
+    except OSError:
+        pass  # best-effort; don't crash the game over a disk hiccup
+
+
+def record_imposter_win(name):
+    key = (name or "").strip().lower()
+    if not key:
+        return
+    entry = LEADERBOARD.get(key)
+    if entry is None:
+        entry = {"name": name.strip(), "wins": 0}
+        LEADERBOARD[key] = entry
+    entry["wins"] += 1
+    save_leaderboard()
+
+
+def leaderboard_list():
+    rows = sorted(LEADERBOARD.values(), key=lambda e: (-e["wins"], e["name"].lower()))
+    return [{"name": r["name"], "wins": r["wins"]} for r in rows]
 
 
 def now():
@@ -108,7 +168,7 @@ def room_view(room, player_id):
         is_imposter = player_id in room["imposterIds"]
         view["yourRole"] = "imposter" if is_imposter else room["word"]
         if is_imposter:
-            view["categoryHint"] = room.get("wordCategory")
+            view["categoryHint"] = category_hint(room.get("wordCategory"))
         ts = room["timer"]
         if ts["status"] == "running":
             remaining = max(0, ts["endsAt"] - now())
@@ -159,6 +219,7 @@ def room_view(room, player_id):
             }
             for p in room["players"]
         ]
+        view["leaderboard"] = leaderboard_list()
     return view
 
 
@@ -176,15 +237,37 @@ def rounds_for_group(num_players):
     return TURN_TOTAL_ROUNDS_LARGE_GROUP if num_players >= LARGE_GROUP_SIZE else TURN_TOTAL_ROUNDS
 
 
+def rotate_imposters(room, ids, n):
+    """Pick the next n imposters from a fair round-robin queue so everyone gets
+    a turn before anyone repeats, instead of pure randomness which can (and did)
+    pick the same person several games in a row."""
+    cycle = [i for i in room.get("imposterCycle", []) if i in ids]
+    newcomers = [i for i in ids if i not in cycle]
+    random.shuffle(newcomers)
+    cycle = cycle + newcomers
+    if len(cycle) < n:
+        cycle = ids[:]
+        random.shuffle(cycle)
+        last = room.get("imposterIds") or set()
+        attempts = 0
+        while len(ids) > n and set(cycle[:n]) == last and attempts < 8:
+            random.shuffle(cycle)
+            attempts += 1
+    chosen = set(cycle[:n])
+    room["imposterCycle"] = cycle[n:]
+    return chosen
+
+
 def start_round(room):
     ids = [p["id"] for p in room["players"]]
     random.shuffle(ids)
     n = max(1, min(room["numImposters"], max(1, len(ids) // 3), len(ids) - 1))
-    room["imposterIds"] = set(ids[:n])
+    room["imposterIds"] = rotate_imposters(room, ids, n)
     room["word"], room["wordCategory"] = pick_word(room["category"])
     room["phase"] = "playing"
     room["timer"] = {"status": "stopped", "remaining": room["timerSeconds"], "endsAt": None}
     room["votes"] = {}
+    room["leaderboardApplied"] = False
     # Turn-based "give a word" rounds: same shuffled order, through everyone.
     room["turnSubPhase"] = "clues"
     room["turn"] = {
@@ -250,6 +333,30 @@ def sync_voting(room):
         ts["status"] = "stopped"
         ts["remaining"] = 0
         ts["endsAt"] = None
+        apply_leaderboard_wins(room)
+
+
+def apply_leaderboard_wins(room):
+    """Called exactly once, right as a game flips into 'results'. An imposter
+    only counts as a leaderboard win if the group's guesses didn't land on
+    them — i.e. they successfully fooled everyone."""
+    if room.get("leaderboardApplied"):
+        return
+    room["leaderboardApplied"] = True
+
+    votes = room.get("votes", {})
+    tally = {}
+    for guess_id in votes.values():
+        tally[guess_id] = tally.get(guess_id, 0) + 1
+    top_count = max(tally.values()) if tally else 0
+    caught_ids = {pid for pid, count in tally.items() if count == top_count and top_count > 0}
+
+    by_id = {p["id"]: p["name"] for p in room["players"]}
+    for imp_id in room["imposterIds"]:
+        if imp_id not in caught_ids:
+            name = by_id.get(imp_id)
+            if name:
+                record_imposter_win(name)
 
 
 class ApiError(Exception):
@@ -356,6 +463,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if len(parts) == 2 and parts[0] == "api" and parts[1] == "categories":
                 return self.send_json(200, {"categories": [ALL_CATEGORY] + list(CATEGORIES.keys())})
+            if len(parts) == 2 and parts[0] == "api" and parts[1] == "leaderboard":
+                with LOCK:
+                    board = leaderboard_list()
+                return self.send_json(200, {"leaderboard": board})
             if len(parts) == 3 and parts[0] == "api" and parts[1] == "rooms":
                 code = parts[2]
                 player_id = (qs.get("playerId") or [""])[0]
@@ -401,6 +512,8 @@ class Handler(BaseHTTPRequestHandler):
                         "word": None,
                         "wordCategory": None,
                         "imposterIds": set(),
+                        "imposterCycle": [],
+                        "leaderboardApplied": False,
                         "timerSeconds": 300,
                         "timer": {"status": "stopped", "remaining": 300, "endsAt": None},
                         "turnSubPhase": None,
@@ -624,6 +737,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    load_leaderboard()
     port = int(sys.argv[1]) if len(sys.argv) > 1 else int(os.environ.get("PORT", 8934))
     server = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"Imposter game server running on http://0.0.0.0:{port}")
